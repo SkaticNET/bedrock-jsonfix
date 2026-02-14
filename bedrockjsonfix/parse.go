@@ -8,18 +8,23 @@ import (
 )
 
 func parseAndMarshal(input []byte, opt Options) ([]byte, RootKind, error) {
+	out, kind, _, err := parseAndMarshalWithParsed(input, opt)
+	return out, kind, err
+}
+
+func parseAndMarshalWithParsed(input []byte, opt Options) ([]byte, RootKind, any, error) {
 	dec := json.NewDecoder(bytes.NewReader(input))
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil {
-		return nil, RootUnknown, err
+		return nil, RootUnknown, nil, err
 	}
 	var trailing any
 	if err := dec.Decode(&trailing); err != io.EOF {
 		if err == nil {
-			return nil, RootUnknown, errors.New("multiple documents")
+			return nil, RootUnknown, nil, errors.New("multiple documents")
 		}
-		return nil, RootUnknown, err
+		return nil, RootUnknown, nil, err
 	}
 	kind := RootUnknown
 	switch v.(type) {
@@ -36,10 +41,10 @@ func parseAndMarshal(input []byte, opt Options) ([]byte, RootKind, error) {
 		out, err = json.Marshal(v)
 	}
 	if err != nil {
-		return nil, RootUnknown, err
+		return nil, RootUnknown, nil, err
 	}
 	out = append(out, '\n')
-	return out, kind, nil
+	return out, kind, v, nil
 }
 
 func strictJSONSingleDocument(input []byte) (bool, RootKind) {

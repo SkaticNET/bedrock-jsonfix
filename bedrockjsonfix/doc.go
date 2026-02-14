@@ -3,7 +3,8 @@
 //
 // ModeStrict accepts strict JSON only and only performs formatting/canonicalization.
 // ModeBedrock (and ModeBedrockSafe alias) enables tolerant parsing features such as
-// comment stripping, trailing-comma removal, root trimming, and root-scan fallback.
+// comment stripping, trailing-comma removal, root trimming, and policy-controlled
+// root-scan fallback.
 //
 // The API is designed for bots and services: use DefaultOptions and enforce
 // MaxInputBytes/MaxOutputBytes to protect against oversized payloads.

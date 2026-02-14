@@ -7,6 +7,19 @@ import (
 	"io"
 )
 
+var errRootRejected = errors.New("root rejected by validator")
+
+func parseCandidate(raw []byte, opt Options) ([]byte, RootKind, error) {
+	out, kind, parsed, err := parseAndMarshalWithParsed(raw, opt)
+	if err != nil {
+		return nil, RootUnknown, err
+	}
+	if !acceptRootCandidate(opt, kind, raw, parsed) {
+		return nil, RootUnknown, errRootRejected
+	}
+	return out, kind, nil
+}
+
 // FixString normalizes string input.
 func FixString(input string, opt Options) (Result, error) { return FixBytes([]byte(input), opt) }
 
@@ -117,18 +130,29 @@ func FixBytes(input []byte, opt Options) (Result, error) {
 		}
 	}
 
-	out, kind, parseErr := parseAndMarshal(candidate, opt)
-	if parseErr != nil && (opt.Mode == ModeBedrock || opt.Mode == ModeBedrockSafe) && opt.RootScanAttempts > 0 {
+	var (
+		out      []byte
+		kind     RootKind
+		parseErr error
+	)
+	if opt.Mode == ModeBedrock || opt.Mode == ModeBedrockSafe {
+		out, kind, parseErr = parseCandidate(candidate, opt)
+	} else {
+		out, kind, parseErr = parseAndMarshal(candidate, opt)
+	}
+	if parseErr != nil && (opt.Mode == ModeBedrock || opt.Mode == ModeBedrockSafe) && shouldScanAfterFailure(parseErr, opt, candidate) {
 		rep.RootScanUsed = true
+		maxCandidates := opt.effectiveRootScanMaxCandidates()
 		scanFrom := 0
-		for attempt := 1; attempt <= opt.RootScanAttempts; attempt++ {
+		baseLeading := rep.TrimmedLeadingJunkBytes
+		for attempt := 1; attempt <= maxCandidates; attempt++ {
 			next := nextRootCandidate(candidate, scanFrom+1)
 			if next < 0 {
 				break
 			}
 			rep.RootScanAttemptsUsed = attempt
 			scanFrom = next
-			rep.TrimmedLeadingJunkBytes += next
+			rep.TrimmedLeadingJunkBytes = baseLeading + next
 			trimmed := candidate[next:]
 			if opt.TrimAfterFirstRoot {
 				if end, ok, _ := trimAfterFirstValueUsingDecoder(trimmed); ok && end <= len(trimmed) {
@@ -142,8 +166,11 @@ func FixBytes(input []byte, opt Options) (Result, error) {
 					trimmed = trimmed[s:e]
 				}
 			}
-			out, kind, parseErr = parseAndMarshal(trimmed, opt)
+			out, kind, parseErr = parseCandidate(trimmed, opt)
 			if parseErr == nil {
+				break
+			}
+			if opt.RootPolicy == RootPolicyScanLeadingJunk && !errors.Is(parseErr, errRootRejected) && !isLikelyWrongRootStart(parseErr, opt.WrongStartMaxOffset) {
 				break
 			}
 		}

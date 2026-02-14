@@ -15,7 +15,8 @@ go get github.com/SkaticNET/bedrock-jsonfix@latest
 ## Output contract
 
 - Output is always **strict JSON** (single top-level document).
-- Output is newline-terminated (`\n`).
+- Normalized output is newline-terminated (`\n`).
+- If `PreserveIfValid` returns the original input, trailing newline behavior is preserved from input.
 - Input fixups (comments, trailing commas, junk trimming, encoding cleanup) are only to recover incoming payloads, not to claim Minecraft itself supports those extensions.
 
 A primary sanitization reason is UTF-8 BOM handling: Bedrock tooling and game ingestion commonly fail on BOM-prefixed JSON, so BOM is removed during normalization.
@@ -59,6 +60,8 @@ _ = res
 - `AggressiveWhitespace`
 - `DropJunkOutsideStrings`
 - `TrimToFirstRoot`, `TrimAfterFirstRoot`
+- `RootPolicy`, `RootScanMaxCandidates`, `WrongStartMaxOffset`
+- `RootValidator`
 - `RootScanAttempts`
 - `EscapeStringControls`
 

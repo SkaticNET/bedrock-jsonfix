@@ -96,6 +96,8 @@ func TestGarbageAfterRoot(t *testing.T) {
 func TestRootScanFallback(t *testing.T) {
 	opt := DefaultOptions()
 	opt.TrimToFirstRoot = false
+	opt.RootPolicy = RootPolicyScanBestEffort
+	opt.RootScanMaxCandidates = 5
 	res, err := FixBytes([]byte("{{oops} {\"ok\":true}"), opt)
 	if err != nil {
 		t.Fatal(err)
@@ -176,6 +178,8 @@ func TestRootScanSkipsNestedRoots(t *testing.T) {
 	opt := DefaultOptions()
 	opt.TrimToFirstRoot = false
 	opt.TrimAfterFirstRoot = false
+	opt.RootPolicy = RootPolicyScanBestEffort
+	opt.RootScanMaxCandidates = 5
 	in := []byte(`{"a":{"b":1},"c":oops} garbage {"ok":true}`)
 	res, err := FixBytes(in, opt)
 	if err != nil {
@@ -193,6 +197,8 @@ func TestDropUnknownOutsideStringsRemovesUnderscorePlusBackslash(t *testing.T) {
 	opt := DefaultOptions()
 	opt.TrimToFirstRoot = false
 	opt.TrimAfterFirstRoot = false
+	opt.RootPolicy = RootPolicyScanBestEffort
+	opt.RootScanMaxCandidates = 5
 	in := []byte(`{_ "a":+ \ }{"ok":true}`)
 	res, err := FixBytes(in, opt)
 	if err != nil {
@@ -221,6 +227,8 @@ func TestDropUnknownOutsideStringsLiteralBoundary(t *testing.T) {
 	opt := DefaultOptions()
 	opt.TrimToFirstRoot = false
 	opt.TrimAfterFirstRoot = false
+	opt.RootPolicy = RootPolicyScanBestEffort
+	opt.RootScanMaxCandidates = 5
 	in := []byte(`{"a":truely} {"ok":true}`)
 	res, err := FixBytes(in, opt)
 	if err != nil {
@@ -264,6 +272,8 @@ func TestDecoderTrimDoesNotBreakValidMultiDocDetectionWhenTrimAfterFirstRootIsFa
 	opt.TrimAfterFirstRoot = false
 	opt.DropJunkOutsideStrings = false
 	opt.TrimToFirstRoot = false
+	opt.RootPolicy = RootPolicyFirst
+	opt.RootScanMaxCandidates = 0
 	opt.RootScanAttempts = 0
 	_, err := FixBytes([]byte(`{"a":1} {"b":2}`), opt)
 	if err == nil {
@@ -271,5 +281,97 @@ func TestDecoderTrimDoesNotBreakValidMultiDocDetectionWhenTrimAfterFirstRootIsFa
 	}
 	if !errors.Is(err, ErrInvalidJSON) {
 		t.Fatalf("expected ErrInvalidJSON, got %v", err)
+	}
+}
+
+func TestMultipleRootsTrimAfterFirstRootTrueKeepsOnlyFirst(t *testing.T) {
+	opt := DefaultOptions()
+	in := []byte(`{"a":1} {"b":2}`)
+	res, err := FixBytes(in, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(res.Output), `"a": 1`) {
+		t.Fatalf("expected first root in output, got: %s", res.Output)
+	}
+	if strings.Contains(string(res.Output), `"b": 2`) {
+		t.Fatalf("expected second root to be trimmed, got: %s", res.Output)
+	}
+	if res.Report.TrimmedTrailingJunkBytes == 0 {
+		t.Fatalf("expected trailing junk trim")
+	}
+}
+
+func TestMultipleRootsTrimAfterFirstRootFalseErrors(t *testing.T) {
+	opt := DefaultOptions()
+	opt.TrimAfterFirstRoot = false
+	opt.DropJunkOutsideStrings = false
+	opt.TrimToFirstRoot = false
+	opt.RootPolicy = RootPolicyFirst
+	_, err := FixBytes([]byte(`{"a":1} {"b":2}`), opt)
+	if err == nil {
+		t.Fatal("expected invalid json error")
+	}
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Fatalf("expected ErrInvalidJSON, got %v", err)
+	}
+}
+
+func TestRootPolicyScanLeadingJunkWrongStartAllowsScan(t *testing.T) {
+	opt := DefaultOptions()
+	opt.TrimToFirstRoot = false
+	opt.TrimAfterFirstRoot = false
+	opt.DropJunkOutsideStrings = false
+	opt.RootPolicy = RootPolicyScanLeadingJunk
+	opt.RootScanMaxCandidates = 5
+	opt.RootValidator = func(kind RootKind, _ []byte, _ any) bool {
+		return kind == RootObject || kind == RootArray
+	}
+	res, err := FixBytes([]byte(`"x{y"  {"ok":true}`), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Report.RootScanUsed {
+		t.Fatalf("expected root scan to be used")
+	}
+	if !strings.Contains(string(res.Output), `"ok": true`) {
+		t.Fatalf("unexpected output: %s", res.Output)
+	}
+}
+
+func TestRootPolicyScanLeadingJunkBrokenDocumentDoesNotJump(t *testing.T) {
+	opt := DefaultOptions()
+	opt.TrimToFirstRoot = false
+	opt.DropJunkOutsideStrings = false
+	opt.RootPolicy = RootPolicyScanLeadingJunk
+	opt.RootScanMaxCandidates = 5
+	opt.WrongStartMaxOffset = 8
+	_, err := FixBytes([]byte(`{"a":1,"b":} {"ok":true}`), opt)
+	if err == nil {
+		t.Fatal("expected invalid json error")
+	}
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Fatalf("expected ErrInvalidJSON, got %v", err)
+	}
+}
+
+func TestRootScanLeadingJunkBytesUsesSelectedCandidateOffset(t *testing.T) {
+	opt := DefaultOptions()
+	opt.TrimToFirstRoot = false
+	opt.TrimAfterFirstRoot = false
+	opt.DropJunkOutsideStrings = false
+	opt.RootPolicy = RootPolicyScanBestEffort
+	opt.RootScanMaxCandidates = 5
+	in := []byte(`{{oops} {bad} {"ok":true}`)
+	res, err := FixBytes(in, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Index(string(in), `{"ok":true}`)
+	if want < 0 {
+		t.Fatal("test setup failed: could not find expected root offset")
+	}
+	if res.Report.TrimmedLeadingJunkBytes != want {
+		t.Fatalf("expected trimmed leading junk %d, got %d", want, res.Report.TrimmedLeadingJunkBytes)
 	}
 }
