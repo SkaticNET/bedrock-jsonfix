@@ -4,7 +4,7 @@
 
 It is designed for bots, services, webhooks, and CLIs that receive imperfect JSON (comments, trailing commas, weird whitespace/encoding, extra garbage around root objects).
 
-It targets **Go 1.25+** for development and CI.
+It targets **Go 1.26+** for development and CI.
 
 ## Install
 
