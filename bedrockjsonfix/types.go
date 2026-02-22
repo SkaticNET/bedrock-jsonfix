@@ -61,7 +61,6 @@ type Options struct {
 	RootScanMaxCandidates  int
 	WrongStartMaxOffset    int64
 
-	// RootScanAttempts is deprecated in favor of RootScanMaxCandidates.
 	// When RootScanMaxCandidates is zero, this value is used for backward compatibility.
 	RootScanAttempts int
 
