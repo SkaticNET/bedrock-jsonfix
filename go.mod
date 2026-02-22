@@ -1,3 +1,3 @@
 module github.com/SkaticNET/bedrock-jsonfix
 
-go 1.25
+go 1.26
