@@ -98,8 +98,8 @@ func isLikelyWrongRootStart(parseErr error, maxOffset int64) bool {
 		return false
 	}
 	var syn *json.SyntaxError
-	if errors.As(parseErr, &syn) && syn.Offset > 0 && syn.Offset <= maxOffset {
-		return true
+	if errors.As(parseErr, &syn) {
+		return syn.Offset > 0 && syn.Offset <= maxOffset
 	}
 	msg := parseErr.Error()
 	return strings.Contains(msg, "looking for beginning of value")

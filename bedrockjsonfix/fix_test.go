@@ -3,6 +3,7 @@ package bedrockjsonfix
 import (
 	"bytes"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 )
@@ -119,6 +120,21 @@ func TestMaxInputBytes(t *testing.T) {
 	}
 }
 
+func TestFixReaderMaxInputBytesMaxInt64DoesNotOverflowLimit(t *testing.T) {
+	opt := DefaultOptions()
+	opt.MaxInputBytes = math.MaxInt64
+	res, err := FixReader(t.Context(), strings.NewReader(`{"a":1}`), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(res.Output, []byte(`{"a":1}`)) {
+		t.Fatalf("unexpected output: %s", res.Output)
+	}
+	if res.Root != RootObject {
+		t.Fatalf("expected object root, got %v", res.Root)
+	}
+}
+
 func TestMaxOutputBytes(t *testing.T) {
 	opt := DefaultOptions()
 	opt.MaxOutputBytes = 5
@@ -143,6 +159,17 @@ func TestModeStrictRejectsBOMPrefixedJSON(t *testing.T) {
 	opt.Mode = ModeStrict
 	opt.PreserveIfValid = false
 	in := append([]byte{0xEF, 0xBB, 0xBF}, []byte("{\"a\":1}")...)
+	_, err := FixBytes(in, opt)
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Fatalf("expected ErrInvalidJSON, got %v", err)
+	}
+}
+
+func TestModeStrictRejectsCP1252Fallback(t *testing.T) {
+	opt := DefaultOptions()
+	opt.Mode = ModeStrict
+	opt.PreserveIfValid = false
+	in := []byte{'{', '"', 'a', '"', ':', '"', 0x93, '"', '}'}
 	_, err := FixBytes(in, opt)
 	if !errors.Is(err, ErrInvalidJSON) {
 		t.Fatalf("expected ErrInvalidJSON, got %v", err)
@@ -373,5 +400,56 @@ func TestRootScanLeadingJunkBytesUsesSelectedCandidateOffset(t *testing.T) {
 	}
 	if res.Report.TrimmedLeadingJunkBytes != want {
 		t.Fatalf("expected trimmed leading junk %d, got %d", want, res.Report.TrimmedLeadingJunkBytes)
+	}
+}
+
+func TestTrimAfterFirstRootCountsLeadingAndTrailingJunk(t *testing.T) {
+	opt := DefaultOptions()
+	opt.TrimToFirstRoot = false
+	opt.TrimAfterFirstRoot = true
+	opt.DropJunkOutsideStrings = false
+	opt.RootPolicy = RootPolicyScanBestEffort
+	opt.RootScanMaxCandidates = 5
+	in := []byte(`bad {"ok":true} trailing`)
+	res, err := FixBytes(in, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLeading := strings.Index(string(in), `{"ok":true}`)
+	if res.Report.TrimmedLeadingJunkBytes != wantLeading {
+		t.Fatalf("expected trimmed leading junk %d, got %d", wantLeading, res.Report.TrimmedLeadingJunkBytes)
+	}
+	if res.Report.TrimmedTrailingJunkBytes != len(" trailing") {
+		t.Fatalf("expected trimmed trailing junk %d, got %d", len(" trailing"), res.Report.TrimmedTrailingJunkBytes)
+	}
+}
+
+func TestRootScanBestEffortCanRecoverAfterBalancedInvalidRoot(t *testing.T) {
+	opt := DefaultOptions()
+	opt.TrimToFirstRoot = false
+	opt.TrimAfterFirstRoot = true
+	opt.DropJunkOutsideStrings = false
+	opt.RootPolicy = RootPolicyScanBestEffort
+	opt.RootScanMaxCandidates = 5
+	in := []byte(`bad {"broken":} [true] trailing`)
+	res, err := FixBytes(in, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Report.RootScanUsed {
+		t.Fatalf("expected root scan to be used")
+	}
+	if !strings.Contains(string(res.Output), `true`) {
+		t.Fatalf("expected to recover later root, got: %s", res.Output)
+	}
+	if res.Root != RootArray {
+		t.Fatalf("expected array root, got %v", res.Root)
+	}
+	wantLeading := strings.Index(string(in), `[true]`)
+	if res.Report.TrimmedLeadingJunkBytes != wantLeading {
+		t.Fatalf("expected trimmed leading junk %d, got %d", wantLeading, res.Report.TrimmedLeadingJunkBytes)
+	}
+	if res.Report.TrimmedTrailingJunkBytes != len(" trailing") {
+		t.Fatalf("expected trimmed trailing junk %d, got %d", len(" trailing"), res.Report.TrimmedTrailingJunkBytes)
 	}
 }

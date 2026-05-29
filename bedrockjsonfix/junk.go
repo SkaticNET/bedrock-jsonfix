@@ -4,25 +4,39 @@ import "bytes"
 
 func dropUnknownOutsideStrings(input []byte, rep *Report) []byte {
 	var b bytes.Buffer
+	changed := false
 	inStr := false
 	esc := false
 	for i := 0; i < len(input); i++ {
 		c := input[i]
 		if !inStr {
 			if isJSONTokenOutsideString(c) {
-				b.WriteByte(c)
+				if changed {
+					b.WriteByte(c)
+				}
 			} else if isAlpha(c) {
 				switch {
 				case hasLiteralToken(input, i, "true"):
-					b.WriteString("true")
+					if changed {
+						b.WriteString("true")
+					}
 					i += 3
 				case hasLiteralToken(input, i, "false"):
-					b.WriteString("false")
+					if changed {
+						b.WriteString("false")
+					}
 					i += 4
 				case hasLiteralToken(input, i, "null"):
-					b.WriteString("null")
+					if changed {
+						b.WriteString("null")
+					}
 					i += 3
 				default:
+					if !changed {
+						b.Grow(len(input))
+						b.Write(input[:i])
+						changed = true
+					}
 					j := i
 					for j < len(input) && isAlpha(input[j]) {
 						rep.DroppedJunkOutsideStrings++
@@ -34,13 +48,20 @@ func dropUnknownOutsideStrings(input []byte, rep *Report) []byte {
 					i = j - 1
 				}
 			} else {
+				if !changed {
+					b.Grow(len(input))
+					b.Write(input[:i])
+					changed = true
+				}
 				rep.DroppedJunkOutsideStrings++
 				if b.Len() == 0 || b.Bytes()[b.Len()-1] != ' ' {
 					b.WriteByte(' ')
 				}
 			}
 		} else {
-			b.WriteByte(c)
+			if changed {
+				b.WriteByte(c)
+			}
 		}
 		if c == '"' && !esc {
 			inStr = !inStr
@@ -51,14 +72,22 @@ func dropUnknownOutsideStrings(input []byte, rep *Report) []byte {
 			esc = false
 		}
 	}
+	if !changed {
+		return input
+	}
 	return b.Bytes()
 }
 
 func hasLiteralToken(input []byte, start int, lit string) bool {
-	if !bytes.HasPrefix(input[start:], []byte(lit)) {
+	end := start + len(lit)
+	if end > len(input) {
 		return false
 	}
-	end := start + len(lit)
+	for i := 0; i < len(lit); i++ {
+		if input[start+i] != lit[i] {
+			return false
+		}
+	}
 	if end < len(input) && isAlpha(input[end]) {
 		return false
 	}

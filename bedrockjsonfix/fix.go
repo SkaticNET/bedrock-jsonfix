@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 )
 
 var errRootRejected = errors.New("root rejected by validator")
@@ -20,6 +21,25 @@ func parseCandidate(raw []byte, opt Options) ([]byte, RootKind, error) {
 	return out, kind, nil
 }
 
+func trimAfterFirstRootCandidate(candidate []byte, opt Options) ([]byte, RootKind, Report, bool) {
+	var rep Report
+	oldLen := len(candidate)
+	if end, ok, _ := trimAfterFirstValueUsingDecoder(candidate); ok && end <= oldLen {
+		clampedEnd := minInt(end, oldLen)
+		rep.TrimmedTrailingJunkBytes = oldLen - clampedEnd
+		return candidate[:clampedEnd], RootUnknown, rep, true
+	}
+
+	start, end, kind, er, extractErr := ExtractFirstJSONValue(candidate, opt)
+	rep = er
+	if extractErr != nil {
+		return candidate, RootUnknown, rep, false
+	}
+	rep.TrimmedLeadingJunkBytes += start
+	rep.TrimmedTrailingJunkBytes += len(candidate) - end
+	return candidate[start:end], kind, rep, true
+}
+
 // FixString normalizes string input.
 func FixString(input string, opt Options) (Result, error) { return FixBytes([]byte(input), opt) }
 
@@ -33,7 +53,11 @@ func FixReader(ctx context.Context, r io.Reader, opt Options) (Result, error) {
 		return Result{}, &FixError{Code: "context_canceled", Message: "operation canceled", Cause: ErrContextCanceled}
 	default:
 	}
-	limited := io.LimitReader(r, opt.MaxInputBytes+1)
+	readLimit := opt.MaxInputBytes
+	if readLimit < math.MaxInt64 {
+		readLimit++
+	}
+	limited := io.LimitReader(r, readLimit)
 	data, err := io.ReadAll(limited)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -68,7 +92,11 @@ func FixBytes(input []byte, opt Options) (Result, error) {
 	}
 
 	var rep Report
-	decoded, err := decodeInput(input, opt, &rep)
+	decodeOpt := opt
+	if opt.Mode == ModeStrict {
+		decodeOpt.AllowCP1252Fallback = false
+	}
+	decoded, err := decodeInput(input, decodeOpt, &rep)
 	if err != nil {
 		return Result{}, err
 	}
@@ -95,7 +123,10 @@ func FixBytes(input []byte, opt Options) (Result, error) {
 	clean = stripComments(clean, &rep)
 	clean = removeTrailingCommas(clean, &rep)
 	candidate = clean
-	if opt.Mode == ModeBedrock || opt.Mode == ModeBedrockSafe {
+	isBedrockMode := opt.Mode == ModeBedrock || opt.Mode == ModeBedrockSafe
+	scanCandidate := candidate
+	scanRep := rep
+	if isBedrockMode {
 		if opt.TrimToFirstRoot {
 			i := firstRootStartOutsideStrings(candidate, 0)
 			if i < 0 {
@@ -107,23 +138,14 @@ func FixBytes(input []byte, opt Options) (Result, error) {
 		if opt.DropJunkOutsideStrings {
 			candidate = dropUnknownOutsideStrings(candidate, &rep)
 		}
+		scanCandidate = candidate
+		scanRep = rep
 		if opt.TrimAfterFirstRoot {
-			oldLen := len(candidate)
-			if end, ok, _ := trimAfterFirstValueUsingDecoder(candidate); ok && end <= oldLen {
-				clampedEnd := minInt(end, oldLen)
-				candidate = candidate[:clampedEnd]
-				rep.TrimmedTrailingJunkBytes += oldLen - clampedEnd
-			} else {
-				start, end, kind, er, extractErr := ExtractFirstJSONValue(candidate, opt)
-				mergeReport(&rep, er)
-				if extractErr == nil {
-					if start > 0 {
-						rep.TrimmedLeadingJunkBytes += start
-					}
-					if end < len(candidate) {
-						rep.TrimmedTrailingJunkBytes += len(candidate) - end
-					}
-					candidate = candidate[start:end]
+			trimmed, kind, er, ok := trimAfterFirstRootCandidate(candidate, opt)
+			mergeReport(&rep, er)
+			if ok {
+				candidate = trimmed
+				if kind != RootUnknown {
 					rootKind = kind
 				}
 			}
@@ -135,39 +157,38 @@ func FixBytes(input []byte, opt Options) (Result, error) {
 		kind     RootKind
 		parseErr error
 	)
-	if opt.Mode == ModeBedrock || opt.Mode == ModeBedrockSafe {
+	if isBedrockMode {
 		out, kind, parseErr = parseCandidate(candidate, opt)
 	} else {
 		out, kind, parseErr = parseAndMarshal(candidate, opt)
 	}
-	if parseErr != nil && (opt.Mode == ModeBedrock || opt.Mode == ModeBedrockSafe) && shouldScanAfterFailure(parseErr, opt, candidate) {
+	if parseErr != nil && isBedrockMode && shouldScanAfterFailure(parseErr, opt, scanCandidate) {
+		rep = scanRep
+		rootKind = RootUnknown
 		rep.RootScanUsed = true
 		maxCandidates := opt.effectiveRootScanMaxCandidates()
 		scanFrom := 0
 		baseLeading := rep.TrimmedLeadingJunkBytes
 		for attempt := 1; attempt <= maxCandidates; attempt++ {
-			next := nextRootCandidate(candidate, scanFrom+1)
+			next := nextRootCandidate(scanCandidate, scanFrom+1)
 			if next < 0 {
 				break
 			}
 			rep.RootScanAttemptsUsed = attempt
 			scanFrom = next
 			rep.TrimmedLeadingJunkBytes = baseLeading + next
-			trimmed := candidate[next:]
+			trimmed := scanCandidate[next:]
+			var trimRep Report
 			if opt.TrimAfterFirstRoot {
-				if end, ok, _ := trimAfterFirstValueUsingDecoder(trimmed); ok && end <= len(trimmed) {
-					trimmed = trimmed[:minInt(end, len(trimmed))]
-				} else {
-					s, e, _, er, extractErr := ExtractFirstJSONValue(trimmed, opt)
-					mergeReport(&rep, er)
-					if extractErr != nil {
-						continue
-					}
-					trimmed = trimmed[s:e]
+				var ok bool
+				trimmed, _, trimRep, ok = trimAfterFirstRootCandidate(trimmed, opt)
+				if !ok {
+					continue
 				}
 			}
 			out, kind, parseErr = parseCandidate(trimmed, opt)
 			if parseErr == nil {
+				mergeReport(&rep, trimRep)
 				break
 			}
 			if opt.RootPolicy == RootPolicyScanLeadingJunk && !errors.Is(parseErr, errRootRejected) && !isLikelyWrongRootStart(parseErr, opt.WrongStartMaxOffset) {

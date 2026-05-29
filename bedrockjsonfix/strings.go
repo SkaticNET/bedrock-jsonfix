@@ -19,12 +19,17 @@ func writeEscapedControl(b *bytes.Buffer, c byte) {
 
 func escapeStringControls(input []byte, rep *Report) []byte {
 	var b bytes.Buffer
-	b.Grow(len(input))
+	changed := false
 	inStr := false
 	esc := false
 	for i := 0; i < len(input); i++ {
 		c := input[i]
 		if inStr && !esc && c < 0x20 {
+			if !changed {
+				b.Grow(len(input) + 1)
+				b.Write(input[:i])
+				changed = true
+			}
 			rep.EscapedStringControls++
 			switch c {
 			case '\n':
@@ -38,7 +43,9 @@ func escapeStringControls(input []byte, rep *Report) []byte {
 			}
 			continue
 		}
-		b.WriteByte(c)
+		if changed {
+			b.WriteByte(c)
+		}
 		if c == '"' && !esc {
 			inStr = !inStr
 		}
@@ -48,22 +55,32 @@ func escapeStringControls(input []byte, rep *Report) []byte {
 			esc = false
 		}
 	}
+	if !changed {
+		return input
+	}
 	return b.Bytes()
 }
 
 func normalizeLiteralNewlinesInStrings(input []byte, rep *Report) []byte {
 	var b bytes.Buffer
-	b.Grow(len(input))
+	changed := false
 	inStr := false
 	esc := false
 	for i := 0; i < len(input); i++ {
 		c := input[i]
 		if inStr && !esc && c == '\n' {
+			if !changed {
+				b.Grow(len(input) + 1)
+				b.Write(input[:i])
+				changed = true
+			}
 			rep.NormalizedNewlinesInStrings++
 			b.WriteString(`\n`)
 			continue
 		}
-		b.WriteByte(c)
+		if changed {
+			b.WriteByte(c)
+		}
 		if c == '"' && !esc {
 			inStr = !inStr
 		}
@@ -72,6 +89,9 @@ func normalizeLiteralNewlinesInStrings(input []byte, rep *Report) []byte {
 		} else {
 			esc = false
 		}
+	}
+	if !changed {
+		return input
 	}
 	return b.Bytes()
 }
