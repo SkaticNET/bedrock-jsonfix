@@ -2,7 +2,9 @@ package bedrockjsonfix
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"io"
 	"math"
 	"strings"
 	"testing"
@@ -31,6 +33,14 @@ func TestCommentsStripping(t *testing.T) {
 	}
 	if res.Report.StrippedLineComments == 0 || res.Report.StrippedBlockComments == 0 {
 		t.Fatalf("expected comment counters")
+	}
+}
+
+func TestBlockCommentActsAsWhitespaceBetweenNumbers(t *testing.T) {
+	opt := DefaultOptions()
+	_, err := FixBytes([]byte(`[1/*comment*/2]`), opt)
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Fatalf("expected ErrInvalidJSON instead of merging number tokens, got %v", err)
 	}
 }
 
@@ -111,12 +121,57 @@ func TestRootScanFallback(t *testing.T) {
 	}
 }
 
+func TestDefaultOptionsAllowLargeResourcePackJSON(t *testing.T) {
+	opt := DefaultOptions()
+	if opt.MaxInputBytes < 128<<20 {
+		t.Fatalf("expected default input limit to be at least 128 MiB, got %d", opt.MaxInputBytes)
+	}
+	if opt.MaxOutputBytes < 512<<20 {
+		t.Fatalf("expected default output limit to be at least 512 MiB, got %d", opt.MaxOutputBytes)
+	}
+
+	input := []byte(`{"data":"` + strings.Repeat("x", 3<<20) + `"}`)
+	res, err := FixBytes(input, opt)
+	if err != nil {
+		t.Fatalf("expected large valid JSON to pass default limits, got %v", err)
+	}
+	if !bytes.Equal(res.Output, input) {
+		t.Fatalf("expected valid JSON to be preserved")
+	}
+}
+
 func TestMaxInputBytes(t *testing.T) {
 	opt := DefaultOptions()
 	opt.MaxInputBytes = 5
 	_, err := FixBytes([]byte("{\"a\":1}"), opt)
 	if !errors.Is(err, ErrInputTooLarge) {
 		t.Fatalf("expected ErrInputTooLarge, got %v", err)
+	}
+}
+
+type cancelAfterFirstReadReader struct {
+	cancel context.CancelFunc
+	reads  int
+}
+
+func (r *cancelAfterFirstReadReader) Read(p []byte) (int, error) {
+	if r.reads == 0 {
+		r.reads++
+		n := copy(p, `{"a":`)
+		r.cancel()
+		return n, nil
+	}
+	n := copy(p, `1}`)
+	return n, io.EOF
+}
+
+func TestFixReaderStopsWhenContextCanceledDuringRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	r := &cancelAfterFirstReadReader{cancel: cancel}
+
+	_, err := FixReader(ctx, r, DefaultOptions())
+	if !errors.Is(err, ErrContextCanceled) {
+		t.Fatalf("expected ErrContextCanceled, got %v", err)
 	}
 }
 

@@ -5,10 +5,56 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 )
 
+const readerChunkSize = 32 << 10
+
 var errRootRejected = errors.New("root rejected by validator")
+
+func contextCanceledError() *FixError {
+	return &FixError{Code: "context_canceled", Message: "operation canceled", Cause: ErrContextCanceled}
+}
+
+func inputTooLargeError(size, limit int64) *FixError {
+	return &FixError{Code: "input_too_large", Message: fmt.Sprintf("input exceeds limit (%d > %d)", size, limit), Cause: ErrInputTooLarge}
+}
+
+func readAllWithContext(ctx context.Context, r io.Reader, maxInputBytes int64) ([]byte, error) {
+	capHint := readerChunkSize
+	if maxInputBytes < int64(capHint) {
+		capHint = int(maxInputBytes)
+	}
+	data := make([]byte, 0, capHint)
+	buf := make([]byte, readerChunkSize)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, contextCanceledError()
+		default:
+		}
+
+		n, err := r.Read(buf)
+		if n > 0 {
+			size := int64(len(data)) + int64(n)
+			if size > maxInputBytes {
+				return nil, inputTooLargeError(size, maxInputBytes)
+			}
+			data = append(data, buf[:n]...)
+			if ctx.Err() != nil {
+				return nil, contextCanceledError()
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return data, nil
+			}
+			if ctx.Err() != nil {
+				return nil, contextCanceledError()
+			}
+			return nil, err
+		}
+	}
+}
 
 func parseCandidate(raw []byte, opt Options) ([]byte, RootKind, error) {
 	out, kind, parsed, err := parseAndMarshalWithParsed(raw, opt)
@@ -50,23 +96,12 @@ func FixReader(ctx context.Context, r io.Reader, opt Options) (Result, error) {
 	}
 	select {
 	case <-ctx.Done():
-		return Result{}, &FixError{Code: "context_canceled", Message: "operation canceled", Cause: ErrContextCanceled}
+		return Result{}, contextCanceledError()
 	default:
 	}
-	readLimit := opt.MaxInputBytes
-	if readLimit < math.MaxInt64 {
-		readLimit++
-	}
-	limited := io.LimitReader(r, readLimit)
-	data, err := io.ReadAll(limited)
+	data, err := readAllWithContext(ctx, r, opt.MaxInputBytes)
 	if err != nil {
-		if ctx.Err() != nil {
-			return Result{}, &FixError{Code: "context_canceled", Message: "operation canceled", Cause: ErrContextCanceled}
-		}
 		return Result{}, err
-	}
-	if int64(len(data)) > opt.MaxInputBytes {
-		return Result{}, &FixError{Code: "input_too_large", Message: fmt.Sprintf("input exceeds limit (%d > %d)", len(data), opt.MaxInputBytes), Cause: ErrInputTooLarge}
 	}
 	return FixBytes(data, opt)
 }
@@ -77,7 +112,7 @@ func FixBytes(input []byte, opt Options) (Result, error) {
 		return Result{}, err
 	}
 	if int64(len(input)) > opt.MaxInputBytes {
-		return Result{}, &FixError{Code: "input_too_large", Message: fmt.Sprintf("input exceeds limit (%d > %d)", len(input), opt.MaxInputBytes), Cause: ErrInputTooLarge}
+		return Result{}, inputTooLargeError(int64(len(input)), opt.MaxInputBytes)
 	}
 
 	if opt.PreserveIfValid {

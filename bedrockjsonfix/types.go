@@ -4,6 +4,11 @@ import (
 	"strings"
 )
 
+const (
+	defaultMaxInputBytes  = 128 << 20
+	defaultMaxOutputBytes = 512 << 20
+)
+
 // Mode controls parser tolerance behavior.
 type Mode int
 
@@ -117,8 +122,8 @@ func DefaultOptions() Options {
 		Indent:                 "  ",
 		Prefix:                 "",
 		PreserveIfValid:        true,
-		MaxInputBytes:          2 << 20,
-		MaxOutputBytes:         7 << 20,
+		MaxInputBytes:          defaultMaxInputBytes,
+		MaxOutputBytes:         defaultMaxOutputBytes,
 		AllowCP1252Fallback:    true,
 		AggressiveWhitespace:   false,
 		DropJunkOutsideStrings: true,

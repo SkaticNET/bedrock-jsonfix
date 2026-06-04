@@ -34,6 +34,9 @@ func stripComments(input []byte, rep *Report) []byte {
 					i++
 				}
 				i++
+				if len(out) == 0 || !isSpace(out[len(out)-1]) {
+					out = append(out, ' ')
+				}
 				continue
 			}
 		}

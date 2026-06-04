@@ -67,6 +67,11 @@ _ = res
 
 Use `DefaultOptions()` for safe service defaults.
 
+Default size limits are intentionally generous for real Bedrock packs:
+
+- `MaxInputBytes`: 128 MiB
+- `MaxOutputBytes`: 512 MiB
+
 ## Common scenarios
 
 - Bedrock `manifest.json` with comments and trailing commas.
@@ -102,6 +107,17 @@ _ = res
 
 - `examples/fixfile`: read file, normalize, write result.
 - `examples/http`: safe HTTP handler usage with context timeout and size caps.
+
+## Mojang sample compatibility
+
+The test suite includes an optional integration test for the official
+Mojang-maintained Bedrock samples:
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/Mojang/bedrock-samples.git /tmp/bedrock-samples
+git -C /tmp/bedrock-samples sparse-checkout set resource_pack
+BEDROCK_SAMPLES_RESOURCE_PACK_DIR=/tmp/bedrock-samples/resource_pack go test ./bedrockjsonfix -run TestOfficialBedrockSamplesResourcePackJSON
+```
 
 ## License
 

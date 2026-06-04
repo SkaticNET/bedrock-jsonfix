@@ -14,7 +14,7 @@ var cp1252SpecialRunes = [32]rune{
 
 func decodeInput(input []byte, opt Options, rep *Report) ([]byte, error) {
 	if utf8.Valid(input) {
-		return append([]byte(nil), input...), nil
+		return input, nil
 	}
 	rep.InputWasInvalidUTF8 = true
 	if !opt.AllowCP1252Fallback {
