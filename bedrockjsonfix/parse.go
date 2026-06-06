@@ -48,24 +48,26 @@ func parseAndMarshalWithParsed(input []byte, opt Options) ([]byte, RootKind, any
 }
 
 func strictJSONSingleDocument(input []byte) (bool, RootKind) {
-	dec := json.NewDecoder(bytes.NewReader(input))
-	dec.UseNumber()
-	var v any
-	if err := dec.Decode(&v); err != nil {
+	if !json.Valid(input) {
 		return false, RootUnknown
 	}
-	var trailing any
-	if err := dec.Decode(&trailing); err != io.EOF {
-		return false, RootUnknown
-	}
-	switch v.(type) {
-	case map[string]any:
+	switch firstJSONToken(input) {
+	case '{':
 		return true, RootObject
-	case []any:
+	case '[':
 		return true, RootArray
 	default:
 		return true, RootUnknown
 	}
+}
+
+func firstJSONToken(input []byte) byte {
+	for _, c := range input {
+		if !isSpace(c) {
+			return c
+		}
+	}
+	return 0
 }
 
 func trimAfterFirstValueUsingDecoder(input []byte) (end int, ok bool, err error) {

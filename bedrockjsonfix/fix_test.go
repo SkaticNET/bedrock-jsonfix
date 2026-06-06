@@ -22,6 +22,40 @@ func TestPreserveIfValid(t *testing.T) {
 	}
 }
 
+func TestStrictJSONSingleDocumentAllocatesNoHeap(t *testing.T) {
+	input := []byte(`{"a":1}`)
+	ok, root := strictJSONSingleDocument(input)
+	if !ok {
+		t.Fatal("expected valid JSON")
+	}
+	if root != RootObject {
+		t.Fatalf("expected object root, got %v", root)
+	}
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		ok, root := strictJSONSingleDocument(input)
+		if !ok || root != RootObject {
+			t.Fatalf("unexpected result: ok=%t root=%v", ok, root)
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("expected strict valid fast path to allocate no heap, got %.2f allocs/run", allocs)
+	}
+}
+
+func TestSanitizeNoopReturnsInputSlice(t *testing.T) {
+	input := []byte(`{"name":"stone","values":[1,2,3]}`)
+	var rep Report
+
+	out := sanitize(input, DefaultOptions(), &rep)
+	if len(out) == 0 || &out[0] != &input[0] {
+		t.Fatal("expected no-op sanitize to reuse input slice")
+	}
+	if rep != (Report{}) {
+		t.Fatalf("expected empty report for no-op sanitize, got %+v", rep)
+	}
+}
+
 func TestCommentsStripping(t *testing.T) {
 	opt := DefaultOptions()
 	res, err := FixBytes([]byte("{//x\n\"a\":1/*y*/}\n"), opt)

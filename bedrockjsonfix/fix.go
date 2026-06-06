@@ -70,20 +70,21 @@ func parseCandidate(raw []byte, opt Options) ([]byte, RootKind, error) {
 func trimAfterFirstRootCandidate(candidate []byte, opt Options) ([]byte, RootKind, Report, bool) {
 	var rep Report
 	oldLen := len(candidate)
+	start, end, kind, er, extractErr := ExtractFirstJSONValue(candidate, opt)
+	if extractErr == nil {
+		rep = er
+		rep.TrimmedLeadingJunkBytes += start
+		rep.TrimmedTrailingJunkBytes += oldLen - end
+		return candidate[start:end], kind, rep, true
+	}
+
 	if end, ok, _ := trimAfterFirstValueUsingDecoder(candidate); ok && end <= oldLen {
 		clampedEnd := minInt(end, oldLen)
 		rep.TrimmedTrailingJunkBytes = oldLen - clampedEnd
 		return candidate[:clampedEnd], RootUnknown, rep, true
 	}
 
-	start, end, kind, er, extractErr := ExtractFirstJSONValue(candidate, opt)
-	rep = er
-	if extractErr != nil {
-		return candidate, RootUnknown, rep, false
-	}
-	rep.TrimmedLeadingJunkBytes += start
-	rep.TrimmedTrailingJunkBytes += len(candidate) - end
-	return candidate[start:end], kind, rep, true
+	return candidate, RootUnknown, rep, false
 }
 
 // FixString normalizes string input.
