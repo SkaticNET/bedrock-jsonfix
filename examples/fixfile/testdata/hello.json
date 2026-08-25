@@ -1,0 +1,6 @@
+discarded prefix /* Resource-pack authoring comment */
+{
+  "name": "hello",
+  "items": ["first",],
+}
+ignored trailer

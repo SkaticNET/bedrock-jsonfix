@@ -37,54 +37,61 @@ includes a strict [pack manifest](https://github.com/Mojang/bedrock-samples/blob
 alongside comment-bearing resource JSON such as
 [item_texture.json](https://github.com/Mojang/bedrock-samples/blob/main/resource_pack/textures/item_texture.json)
 and [manifest_validation_screen.json](https://github.com/Mojang/bedrock-samples/blob/main/resource_pack/ui/manifest_validation_screen.json).
-Use the fixer at the read boundary before passing those files to a strict JSON
-decoder:
-
-```go
-package main
-
-import (
-	"encoding/json"
-	"fmt"
-
-	"github.com/SkaticNET/bedrock-jsonfix/v2/bedrockjsonfix"
-)
-
-func main() {
-	input := []byte(`{
-	  // Resource-pack UI authoring comment
-	  "namespace": "sample_ui",
-	  "title": { "type": "label", },
-	}`)
-
-	fixed, err := bedrockjsonfix.Fix(input)
-	if err != nil {
-		panic(err)
-	}
-
-	var document map[string]json.RawMessage
-	if err := json.Unmarshal(fixed, &document); err != nil {
-		panic(err)
-	}
-	fmt.Printf("%s\n", fixed)
-}
-```
-
-The output is strict JSON:
-
-```json
-{"namespace":"sample_ui","title":{"type":"label"}}
-```
+Use the fixer at the file-read boundary before a strict decoder consumes the
+resource JSON.
 
 ## File-to-file use
 
-The included example writes repaired JSON to a separate path:
+The runnable example includes a deliberately messy
+[`hello.json`](examples/fixfile/testdata/hello.json):
 
-```bash
-go run ./examples/fixfile input.json output.json
+```jsonc
+discarded prefix /* Resource-pack authoring comment */
+{
+  "name": "hello",
+  "items": ["first",],
+}
+ignored trailer
 ```
 
-See [`examples/fixfile`](examples/fixfile) for the complete program.
+Copy it to a working directory, then write the repaired document to a separate
+file:
+
+```bash
+cp examples/fixfile/testdata/hello.json ./hello.json
+go run ./examples/fixfile hello.json hello.cleaned.json
+```
+
+`hello.cleaned.json` is valid JSON and retains the document's permitted
+whitespace and member order:
+
+```json
+{
+  "name": "hello",
+  "items": ["first"]
+}
+```
+
+Pass `--report` when a machine-readable result summary is useful:
+
+```bash
+go run ./examples/fixfile --report hello.report.json hello.json hello.cleaned.json
+```
+
+The optional `hello.report.json` is strict JSON as well:
+
+```json
+{
+  "input_path": "hello.json",
+  "output_path": "hello.cleaned.json",
+  "input_bytes": 117,
+  "output_bytes": 43,
+  "changed": true,
+  "valid_json": true
+}
+```
+
+See [`examples/fixfile`](examples/fixfile) for the complete command.
 
 ## Scope
 
