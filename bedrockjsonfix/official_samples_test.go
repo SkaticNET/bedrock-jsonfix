@@ -14,10 +14,6 @@ func TestOfficialBedrockSamplesResourcePackJSON(t *testing.T) {
 		t.Skip("set BEDROCK_SAMPLES_RESOURCE_PACK_DIR to Mojang/bedrock-samples/resource_pack to run")
 	}
 
-	opt := DefaultOptions()
-	opt.Pretty = false
-	opt.PreserveIfValid = false
-
 	checked := 0
 	var failures []string
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
@@ -34,7 +30,7 @@ func TestOfficialBedrockSamplesResourcePackJSON(t *testing.T) {
 			failures = append(failures, fmt.Sprintf("%s: %v", path, readErr))
 			return nil
 		}
-		if _, fixErr := FixBytes(input, opt); fixErr != nil {
+		if _, fixErr := Fix(input); fixErr != nil {
 			rel, _ := filepath.Rel(dir, path)
 			failures = append(failures, fmt.Sprintf("%s: %v", rel, fixErr))
 		}
