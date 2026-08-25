@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SkaticNET/bedrock-jsonfix/bedrockjsonfix"
+	"github.com/SkaticNET/bedrock-jsonfix/v2/bedrockjsonfix"
 )
 
 func main() {
