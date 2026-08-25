@@ -11,14 +11,14 @@ import (
 const maxInputBytes = 128 << 20
 
 var (
-	ErrInputTooLarge = errors.New("input too large")
-	ErrInvalidJSON   = errors.New("invalid JSON")
+	errInputTooLarge = errors.New("input too large")
+	errInvalidJSON   = errors.New("invalid JSON")
 )
 
 // Fix returns one valid JSON object or array without changing JSON member names.
 func Fix(input []byte) ([]byte, error) {
 	if len(input) > maxInputBytes {
-		return nil, fmt.Errorf("%w: %d bytes exceeds %d bytes", ErrInputTooLarge, len(input), maxInputBytes)
+		return nil, fmt.Errorf("%w: %d bytes exceeds %d bytes", errInputTooLarge, len(input), maxInputBytes)
 	}
 	if json.Valid(input) {
 		return append([]byte(nil), input...), nil
@@ -26,7 +26,7 @@ func Fix(input []byte) ([]byte, error) {
 
 	input = stripBOM(input)
 	if !utf8.Valid(input) {
-		return nil, fmt.Errorf("%w: input is not UTF-8", ErrInvalidJSON)
+		return nil, fmt.Errorf("%w: input is not UTF-8", errInvalidJSON)
 	}
 
 	cleaned := cleanOutsideStrings(input)
@@ -44,7 +44,7 @@ func Fix(input []byte) ([]byte, error) {
 	}
 	out := append([]byte(nil), cleaned[start:end]...)
 	if !json.Valid(out) {
-		return nil, ErrInvalidJSON
+		return nil, errInvalidJSON
 	}
 	return out, nil
 }
@@ -117,7 +117,7 @@ func stripComments(input []byte) ([]byte, error) {
 					i++
 				}
 				if i+1 >= len(input) {
-					return nil, fmt.Errorf("%w: unterminated block comment", ErrInvalidJSON)
+					return nil, fmt.Errorf("%w: unterminated block comment", errInvalidJSON)
 				}
 				out = append(out, ' ')
 				i += 2
@@ -203,12 +203,12 @@ func firstDocument(input []byte) (int, int, error) {
 				stack = append(stack, current)
 			case '}':
 				if stack[len(stack)-1] != '{' {
-					return 0, 0, ErrInvalidJSON
+					return 0, 0, errInvalidJSON
 				}
 				stack = stack[:len(stack)-1]
 			case ']':
 				if stack[len(stack)-1] != '[' {
-					return 0, 0, ErrInvalidJSON
+					return 0, 0, errInvalidJSON
 				}
 				stack = stack[:len(stack)-1]
 			}
@@ -216,9 +216,9 @@ func firstDocument(input []byte) (int, int, error) {
 				return start, i + 1, nil
 			}
 		}
-		return 0, 0, ErrInvalidJSON
+		return 0, 0, errInvalidJSON
 	}
-	return 0, 0, ErrInvalidJSON
+	return 0, 0, errInvalidJSON
 }
 
 func nextStringState(inString, escaped bool, c byte) (bool, bool) {
