@@ -19,7 +19,8 @@ import "github.com/SkaticNET/bedrock-jsonfix/v2/bedrockjsonfix"
 
 ## What it fixes
 
-Bedrock resource-pack JSON commonly contains authoring syntax that Go's strict
+Bedrock resource-pack JSON is often JSON-with-comments rather than strict JSON.
+Mojang's own sample UI files use line and block comments, which Go's strict
 `encoding/json` rejects. `Fix` handles a leading UTF-8 BOM, line and block
 comments, trailing commas, stray bytes around the first complete JSON object or
 array, and raw control bytes. It preserves quoted content, member spelling,
@@ -32,9 +33,11 @@ UTF-8 after the BOM is removed and be no larger than 128 MiB.
 ## Resource-pack example
 
 The official [Bedrock Samples resource pack](https://github.com/Mojang/bedrock-samples/tree/main/resource_pack)
-includes JSON in familiar forms: a [pack manifest](https://github.com/Mojang/bedrock-samples/blob/main/resource_pack/manifest.json),
-texture metadata, and JSON-UI files such as [manifest_validation_screen.json](https://github.com/Mojang/bedrock-samples/blob/main/resource_pack/ui/manifest_validation_screen.json).
-Use the fixer at the read boundary before passing a document to a strict JSON
+includes a strict [pack manifest](https://github.com/Mojang/bedrock-samples/blob/main/resource_pack/manifest.json)
+alongside comment-bearing resource JSON such as
+[item_texture.json](https://github.com/Mojang/bedrock-samples/blob/main/resource_pack/textures/item_texture.json)
+and [manifest_validation_screen.json](https://github.com/Mojang/bedrock-samples/blob/main/resource_pack/ui/manifest_validation_screen.json).
+Use the fixer at the read boundary before passing those files to a strict JSON
 decoder:
 
 ```go
