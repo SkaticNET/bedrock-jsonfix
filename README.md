@@ -26,6 +26,9 @@ comments, trailing commas, stray bytes around the first complete JSON object or
 array, and raw control bytes. It preserves quoted content, member spelling,
 source member order, and duplicate keys exactly as written.
 
+It is deliberately tolerant of common authoring noise around a document, so
+the recovery behavior is broader than a strict JSON reader.
+
 It does not merge documents, normalize keys, infer schemas, or change values.
 The result is always one valid JSON document or an error. Input must be valid
 UTF-8 after the BOM is removed and be no larger than 128 MiB.

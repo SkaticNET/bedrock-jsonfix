@@ -31,6 +31,32 @@ func TestFixMakesBedrockAuthoringSyntaxValidJSON(t *testing.T) {
 	}
 }
 
+func TestFixKeepsCommentedDocumentAndEscapesRawStringControls(t *testing.T) {
+	input := append([]byte{0xEF, 0xBB, 0xBF}, []byte("/* leading comment */\n{\n  \"message\": \"before\x01after\", // inline comment\n  \"items\": [1]\n}\n// trailing comment\ntrailing data")...)
+
+	fixed, err := Fix(input)
+	if err != nil {
+		t.Fatalf("Fix: %v", err)
+	}
+	if !json.Valid(fixed) {
+		t.Fatalf("Fix returned invalid JSON: %q", fixed)
+	}
+
+	var document struct {
+		Message string `json:"message"`
+		Items   []int  `json:"items"`
+	}
+	if err := json.Unmarshal(fixed, &document); err != nil {
+		t.Fatalf("decode fixed JSON: %v", err)
+	}
+	if got, want := document.Message, "before\x01after"; got != want {
+		t.Fatalf("message = %q, want %q", got, want)
+	}
+	if got, want := document.Items, []int{1}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("items = %v, want %v", got, want)
+	}
+}
+
 func TestFixDropsOnlyDataOutsideTheFirstDocument(t *testing.T) {
 	fixed, err := Fix([]byte(`prefix {"name":"Example","items":[1,2,],} suffix`))
 	if err != nil {
