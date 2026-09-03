@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestFixMakesBedrockAuthoringSyntaxValidJSON(t *testing.T) {
@@ -82,5 +83,51 @@ func TestFixSkipsBracesInsideLeadingGarbageStrings(t *testing.T) {
 func TestFixRejectsIncompleteJSON(t *testing.T) {
 	if _, err := Fix([]byte(`{"name":`)); err == nil {
 		t.Fatal("Fix accepted incomplete JSON")
+	}
+}
+
+func TestFixRepairsWindows1252BeforeValidJSONFastPath(t *testing.T) {
+	input := []byte("{\"name\":\"\xA7lLegacy\"}")
+
+	fixed, err := Fix(input)
+	if err != nil {
+		t.Fatalf("Fix: %v", err)
+	}
+	if !utf8.Valid(fixed) {
+		t.Fatalf("Fix returned invalid UTF-8: %x", fixed)
+	}
+
+	var value map[string]string
+	if err := json.Unmarshal(fixed, &value); err != nil {
+		t.Fatalf("decode fixed JSON: %v", err)
+	}
+	if value["name"] != "§lLegacy" {
+		t.Fatalf("name = %q, want %q", value["name"], "§lLegacy")
+	}
+	if bytes.Contains(fixed, []byte("�")) {
+		t.Fatalf("fixed output contains replacement rune: %q", fixed)
+	}
+}
+
+func TestFixRepairsWindows1252AndDropsTrailingBrace(t *testing.T) {
+	input := []byte("{\"name\":\"Größe \xA7aPack\"}}\r\n")
+
+	fixed, err := Fix(input)
+	if err != nil {
+		t.Fatalf("Fix: %v", err)
+	}
+
+	var value map[string]string
+	if err := json.Unmarshal(fixed, &value); err != nil {
+		t.Fatalf("decode fixed JSON: %v", err)
+	}
+	if value["name"] != "Größe §aPack" {
+		t.Fatalf("name = %q, want %q", value["name"], "Größe §aPack")
+	}
+}
+
+func TestFixStillRejectsBinaryWithoutJSONDocument(t *testing.T) {
+	if _, err := Fix([]byte{0xFF, 0x00, 0x81, 0x10}); err == nil {
+		t.Fatal("Fix accepted binary data without a JSON document")
 	}
 }

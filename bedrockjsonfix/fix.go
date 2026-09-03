@@ -20,13 +20,12 @@ func Fix(input []byte) ([]byte, error) {
 	if len(input) > maxInputBytes {
 		return nil, fmt.Errorf("%w: %d bytes exceeds %d bytes", errInputTooLarge, len(input), maxInputBytes)
 	}
-	if json.Valid(input) {
-		return append([]byte(nil), input...), nil
-	}
-
 	input = stripBOM(input)
 	if !utf8.Valid(input) {
-		return nil, fmt.Errorf("%w: input is not UTF-8", errInvalidJSON)
+		input = repairInvalidUTF8AsWindows1252(input)
+	}
+	if json.Valid(input) {
+		return append([]byte(nil), input...), nil
 	}
 
 	cleaned := cleanOutsideStrings(input)
@@ -47,6 +46,39 @@ func Fix(input []byte) ([]byte, error) {
 		return nil, errInvalidJSON
 	}
 	return out, nil
+}
+
+var windows1252C1 = [...]rune{
+	'\u20AC', '\u0081', '\u201A', '\u0192',
+	'\u201E', '\u2026', '\u2020', '\u2021',
+	'\u02C6', '\u2030', '\u0160', '\u2039',
+	'\u0152', '\u008D', '\u017D', '\u008F',
+	'\u0090', '\u2018', '\u2019', '\u201C',
+	'\u201D', '\u2022', '\u2013', '\u2014',
+	'\u02DC', '\u2122', '\u0161', '\u203A',
+	'\u0153', '\u009D', '\u017E', '\u0178',
+}
+
+func repairInvalidUTF8AsWindows1252(input []byte) []byte {
+	out := make([]byte, 0, len(input)+16)
+	for len(input) > 0 {
+		r, size := utf8.DecodeRune(input)
+		if r != utf8.RuneError || size > 1 {
+			out = append(out, input[:size]...)
+			input = input[size:]
+			continue
+		}
+
+		b := input[0]
+		input = input[1:]
+		if b >= 0x80 && b <= 0x9F {
+			r = windows1252C1[int(b-0x80)]
+		} else {
+			r = rune(b)
+		}
+		out = utf8.AppendRune(out, r)
+	}
+	return out
 }
 
 func stripBOM(input []byte) []byte {
