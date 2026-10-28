@@ -57,7 +57,7 @@ func normalizeLeadingZeros(input []byte) []byte {
 			start := i
 			for i < len(input) {
 				c = input[i]
-				if !(c >= '0' && c <= '9') && c != '-' && c != '+' && c != '.' && c != 'e' && c != 'E' {
+				if (c < '0' || c > '9') && c != '-' && c != '+' && c != '.' && c != 'e' && c != 'E' {
 					break
 				}
 				i++
