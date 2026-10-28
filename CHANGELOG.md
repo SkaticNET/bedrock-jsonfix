@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.0.2 — 2026-10-28
+
+- Fixed rejection of Bedrock numbers with leading zeros, including fractions
+  and exponents. For example, `[01,026,052]` becomes `[1,26,52]`.
+- Numeric recovery preserves precision, signs and exponent spelling without
+  converting values through floating point. Quoted strings remain unchanged.
+- No public API changes.
+- Requires Go 1.27.3.
+
 ## v2.0.1 — 2026-09-03
 
 - Fixed legacy Bedrock JSON containing Windows-1252 bytes, including raw `§`

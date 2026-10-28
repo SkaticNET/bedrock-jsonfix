@@ -23,15 +23,18 @@ Bedrock resource-pack JSON is often JSON-with-comments rather than strict JSON.
 Mojang's own sample UI files use line and block comments, which Go's strict
 `encoding/json` rejects. `Fix` handles a leading UTF-8 BOM, line and block
 comments, trailing commas, stray bytes around the first complete JSON object or
-array, and raw control bytes. It preserves quoted content, member spelling,
+array, raw control bytes, and numbers with redundant leading zeros (`026` becomes
+`26`). Fractions and exponents keep their original spelling and precision.
+It preserves quoted content, member spelling,
 source member order, and duplicate keys exactly as written.
 
 It is deliberately tolerant of common authoring noise around a document, so
 the recovery behavior is broader than a strict JSON reader.
 
 It does not merge documents, normalize keys, infer schemas, or change values.
-The result is always one valid JSON document or an error. Input must be valid
-UTF-8 after the BOM is removed and be no larger than 128 MiB.
+The result is always one valid JSON document or an error. Invalid UTF-8 bytes
+are recovered as Windows-1252; valid UTF-8 sequences are preserved. Input must
+be no larger than 128 MiB.
 
 ## Resource-pack example
 

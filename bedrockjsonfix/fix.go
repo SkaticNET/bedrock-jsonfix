@@ -41,11 +41,44 @@ func Fix(input []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := append([]byte(nil), cleaned[start:end]...)
+	out := normalizeLeadingZeros(cleaned[start:end])
 	if !json.Valid(out) {
 		return nil, errInvalidJSON
 	}
 	return out, nil
+}
+
+func normalizeLeadingZeros(input []byte) []byte {
+	out := make([]byte, 0, len(input))
+	inString, escaped := false, false
+	for i := 0; i < len(input); {
+		c := input[i]
+		if !inString && (c == '-' || (c >= '0' && c <= '9')) {
+			start := i
+			for i < len(input) {
+				c = input[i]
+				if !(c >= '0' && c <= '9') && c != '-' && c != '+' && c != '.' && c != 'e' && c != 'E' {
+					break
+				}
+				i++
+			}
+			digits := start
+			if input[digits] == '-' {
+				out = append(out, '-')
+				digits++
+			}
+			// Keep numeric text intact apart from redundant integer zeros.
+			for digits+1 < i && input[digits] == '0' && input[digits+1] >= '0' && input[digits+1] <= '9' {
+				digits++
+			}
+			out = append(out, input[digits:i]...)
+			continue
+		}
+		out = append(out, c)
+		inString, escaped = nextStringState(inString, escaped, c)
+		i++
+	}
+	return out
 }
 
 var windows1252C1 = [...]rune{
