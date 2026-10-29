@@ -53,7 +53,7 @@ func TestFixLeadingZerosRejectsMalformedNumbers(t *testing.T) {
 }
 
 func FuzzFixNumbers(f *testing.F) {
-	for _, input := range []string{`[001,-00.125,01e02]`, `{"01":"\\\"002","n":003,}`, `/*x*/[1e+003]`, `[01..2]`} {
+	for _, input := range []string{`[001,-00.125,01e02]`, `{"01":"\\\"002","n":003,}`, `/*x*/[1e+003]`, `[01..2]`, `{"a":1}/*`, `/*lead*/[1,]/*`} {
 		f.Add([]byte(input))
 	}
 	f.Fuzz(func(t *testing.T, input []byte) {

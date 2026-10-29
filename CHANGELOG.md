@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.3 — 2026-10-29
+
+- Keep the first complete JSON document when discarded trailing data contains
+  an unfinished block comment. For example, `{"a":1}/*` now returns `{"a":1}`.
+- Unterminated comments before or inside that document still return an error.
+- No public API changes.
+
 ## v2.0.2 — 2026-10-28
 
 - Fixed rejection of Bedrock numbers with leading zeros, including fractions

@@ -10,7 +10,7 @@ fixed, err := bedrockjsonfix.Fix(input)
 ## Install
 
 ```bash
-go get github.com/SkaticNET/bedrock-jsonfix/v2@v2.0.0
+go get github.com/SkaticNET/bedrock-jsonfix/v2@v2.0.3
 ```
 
 ```go
@@ -25,6 +25,9 @@ Mojang's own sample UI files use line and block comments, which Go's strict
 comments, trailing commas, stray bytes around the first complete JSON object or
 array, raw control bytes, and numbers with redundant leading zeros (`026` becomes
 `26`). Fractions and exponents keep their original spelling and precision.
+Once the first object or array closes, discarded trailing data cannot invalidate
+it, including an unfinished trailing block comment. Comments before or inside
+that document must still close.
 It preserves quoted content, member spelling,
 source member order, and duplicate keys exactly as written.
 

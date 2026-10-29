@@ -159,6 +159,7 @@ func stripComments(input []byte) ([]byte, error) {
 	out := make([]byte, 0, len(input))
 	inString := false
 	escaped := false
+	depth := 0
 	for i := 0; i < len(input); {
 		c := input[i]
 		if !inString && c == '/' && i+1 < len(input) {
@@ -190,6 +191,20 @@ func stripComments(input []byte) ([]byte, error) {
 			}
 		}
 		out = append(out, c)
+		if !inString {
+			switch c {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				if depth > 0 {
+					depth--
+					if depth == 0 {
+						// Trailing input cannot invalidate the first completed document.
+						return out, nil
+					}
+				}
+			}
+		}
 		inString, escaped = nextStringState(inString, escaped, c)
 		i++
 	}
