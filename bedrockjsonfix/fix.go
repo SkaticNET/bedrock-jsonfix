@@ -2,6 +2,7 @@
 package bedrockjsonfix
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,7 @@ var (
 	errInvalidJSON   = errors.New("invalid JSON")
 )
 
-// Fix returns one valid JSON object or array without changing JSON member names.
+// Fix returns one valid JSON value without changing JSON member names.
 func Fix(input []byte) ([]byte, error) {
 	if len(input) > maxInputBytes {
 		return nil, fmt.Errorf("%w: %d bytes exceeds %d bytes", errInputTooLarge, len(input), maxInputBytes)
@@ -29,6 +30,14 @@ func Fix(input []byte) ([]byte, error) {
 	}
 
 	cleaned := cleanOutsideStrings(input)
+	if start, scalar := firstScalar(cleaned); scalar {
+		value := normalizeLeadingZeros(escapeStringControls(cleaned[start:]))
+		var first json.RawMessage
+		if err := json.NewDecoder(bytes.NewReader(value)).Decode(&first); err != nil {
+			return nil, errInvalidJSON
+		}
+		return first, nil
+	}
 	var err error
 	cleaned, err = stripComments(cleaned)
 	if err != nil {
@@ -257,6 +266,44 @@ func removeTrailingCommas(input []byte) []byte {
 		inString, escaped = nextStringState(inString, escaped, c)
 	}
 	return out
+}
+
+// firstScalar only recognizes a scalar at the first non-comment token. Other
+// prefixes remain the responsibility of the existing compound recovery path.
+func firstScalar(input []byte) (int, bool) {
+	i := 0
+	for i < len(input) {
+		if isJSONSpace(input[i]) {
+			i++
+			continue
+		}
+		if input[i] == '/' && i+1 < len(input) {
+			if input[i+1] == '/' {
+				i += 2
+				for i < len(input) && input[i] != '\n' && input[i] != '\r' {
+					i++
+				}
+				continue
+			}
+			if input[i+1] == '*' {
+				i += 2
+				for i+1 < len(input) && (input[i] != '*' || input[i+1] != '/') {
+					i++
+				}
+				if i+1 >= len(input) {
+					return 0, false
+				}
+				i += 2
+				continue
+			}
+		}
+		break
+	}
+	if i == len(input) {
+		return 0, false
+	}
+	c := input[i]
+	return i, c == '"' || c == '-' || c >= '0' && c <= '9' || c == 'n' || c == 't' || c == 'f'
 }
 
 func firstDocument(input []byte) (int, int, error) {

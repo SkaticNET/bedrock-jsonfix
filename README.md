@@ -1,6 +1,6 @@
 # bedrock-jsonfix
 
-`bedrock-jsonfix` converts one Bedrock-style JSON object or array into strict,
+`bedrock-jsonfix` converts one Bedrock-style JSON value into strict,
 valid UTF-8 JSON without rebuilding its object structure.
 
 ```go
@@ -25,9 +25,13 @@ Mojang's own sample UI files use line and block comments, which Go's strict
 comments, trailing commas, stray bytes around the first complete JSON object or
 array, raw control bytes, and numbers with redundant leading zeros (`026` becomes
 `26`). Fractions and exponents keep their original spelling and precision.
-Once the first object or array closes, discarded trailing data cannot invalidate
-it, including an unfinished trailing block comment. Comments before or inside
-that document must still close.
+An initial scalar value also takes precedence over any later object or array.
+Once that value or the first object or array is complete, discarded trailing
+data cannot invalidate it, including an unfinished trailing block comment.
+Comments before or inside that document must still close.
+An invalid initial scalar token returns an error; repair does not select a
+later object to replace it. Other authoring prefixes keep the existing
+object/array recovery behavior.
 It preserves quoted content, member spelling,
 source member order, and duplicate keys exactly as written.
 

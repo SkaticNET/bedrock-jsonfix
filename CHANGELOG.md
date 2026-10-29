@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.4 — 2026-10-29
+
+- Preserve an initial scalar instead of selecting a later object or array.
+  For example, `null {"later":1}` now returns `null`.
+- An initial quoted string is now the selected value, including when a
+  compound document follows it. Malformed scalar starts return an error.
+- Discarded trailing comments cannot invalidate a completed scalar. Existing
+  string-control and leading-zero repairs still preserve numeric precision.
+- No public API changes.
+
 ## v2.0.3 — 2026-10-29
 
 - Keep the first complete JSON document when discarded trailing data contains
